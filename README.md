@@ -105,9 +105,14 @@ The skill and global rules are compatible:
 
 - The skill is loaded only for relevant token-saving/reporting requests.
 - The global rules keep everyday development sessions efficient.
-- The installer writes a marked block between `<!-- codex-token-discipline:start -->` and `<!-- codex-token-discipline:end -->`, so rerunning it updates that block instead of appending endless duplicates.
+- If the installer finds its marked block between `<!-- codex-token-discipline:start -->` and `<!-- codex-token-discipline:end -->`, rerunning it updates that block.
+- If the installer sees existing token-discipline-like rules but no marked block, it leaves them unchanged to avoid duplicates.
 
-If you previously wrote your own global rules and want full control, either keep your existing `AGENTS.md` and install only the skill, or run the installer and then edit the marked block.
+If you previously wrote your own global rules and want full control, either keep your existing `AGENTS.md` and run the installer normally, or force the managed block:
+
+```bash
+CODEX_TOKEN_DISCIPLINE_FORCE_AGENTS=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Yice-AI/codex-token-discipline/main/scripts/install.sh)"
+```
 
 ## Notes
 

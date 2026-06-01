@@ -10,6 +10,7 @@ CAVEMAN_SKILL_DIR="$CODEX_HOME/skills/caveman"
 BIN_DIR="$HOME/.local/bin"
 RAW_BASE="https://raw.githubusercontent.com/$REPO/$REF"
 SKIP_DEPS="${CODEX_TOKEN_DISCIPLINE_SKIP_DEPS:-0}"
+FORCE_AGENTS="${CODEX_TOKEN_DISCIPLINE_FORCE_AGENTS:-0}"
 
 export PATH="$BIN_DIR:$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
@@ -99,6 +100,52 @@ EOF
   echo "Serena MCP configured in $config_file"
 }
 
+has_existing_token_discipline() {
+  local agents_file="$1"
+  grep -Eiq 'Global Token Discipline|RTK|rtk git|rtk grep|Serena|semantic lookup|narrow file ranges|old conversation|handoff|screenshots|base64' "$agents_file"
+}
+
+write_global_agents_block() {
+  local agents_file="$1"
+  local tmp_file
+
+  if grep -q '<!-- codex-token-discipline:start -->' "$agents_file"; then
+    tmp_file="$(mktemp)"
+    awk '
+      /<!-- codex-token-discipline:start -->/ {skip=1; next}
+      /<!-- codex-token-discipline:end -->/ {skip=0; next}
+      skip != 1 {print}
+    ' "$agents_file" > "$tmp_file"
+  elif [[ "$FORCE_AGENTS" != "1" ]] && has_existing_token_discipline "$agents_file"; then
+    echo "Existing token-discipline-like rules found in $agents_file; leaving them unchanged."
+    echo "Set CODEX_TOKEN_DISCIPLINE_FORCE_AGENTS=1 to append the managed block anyway."
+    return 0
+  else
+    tmp_file="$(mktemp)"
+    cp "$agents_file" "$tmp_file"
+  fi
+
+  cat >> "$tmp_file" <<'EOF'
+
+<!-- codex-token-discipline:start -->
+# Global Token Discipline
+
+- Use RTK for supported shell commands when available to reduce tool-output tokens.
+- Common rewrites: `git ...` -> `rtk git ...`; `rg ...`/`grep ...` -> `rtk grep ...`; `npm ...` -> `rtk npm ...`; `npx ...` -> `rtk npx ...`; `pytest ...` -> `rtk pytest ...`; `cargo ...` -> `rtk cargo ...`; `tsc ...` -> `rtk tsc ...`; build/test/lint commands -> the matching `rtk` subcommand when available.
+- If RTK is unavailable or unsupported for a command, keep output tight with targeted args, `head`/`tail`, or explicit summaries.
+- Prefer semantic lookup/editing tools before broad file reads when exploring or modifying code.
+- Prefer narrow file ranges, symbol references, focused search results, and structured queries over whole-file or whole-repo dumps.
+- Avoid reading generated files, build artifacts, lockfiles, large JSON, screenshots, or old conversation logs unless required.
+- For UI work, prefer DOM checks and small cropped screenshots over full-page images.
+- For cross-session continuity, use short handoff/context summaries instead of rereading old conversations.
+- Keep progress updates and final replies concise while preserving decisions, changed files, verification, and blockers. Use compressed wording for routine updates.
+<!-- codex-token-discipline:end -->
+EOF
+
+  mv "$tmp_file" "$agents_file"
+  echo "Global token discipline block installed in $agents_file"
+}
+
 need curl
 
 mkdir -p "$MAIN_SKILL_DIR/scripts" "$REPORT_SKILL_DIR" "$CAVEMAN_SKILL_DIR" "$BIN_DIR" "$CODEX_HOME"
@@ -118,32 +165,7 @@ install -m 0755 "$MAIN_SKILL_DIR/scripts/codex-token-report" "$BIN_DIR/codex-tok
 
 AGENTS_FILE="$CODEX_HOME/AGENTS.md"
 touch "$AGENTS_FILE"
-
-tmp_file="$(mktemp)"
-awk '
-  /<!-- codex-token-discipline:start -->/ {skip=1; next}
-  /<!-- codex-token-discipline:end -->/ {skip=0; next}
-  skip != 1 {print}
-' "$AGENTS_FILE" > "$tmp_file"
-
-cat >> "$tmp_file" <<'EOF'
-
-<!-- codex-token-discipline:start -->
-# Global Token Discipline
-
-- Use RTK for supported shell commands when available to reduce tool-output tokens.
-- Common rewrites: `git ...` -> `rtk git ...`; `rg ...`/`grep ...` -> `rtk grep ...`; `npm ...` -> `rtk npm ...`; `npx ...` -> `rtk npx ...`; `pytest ...` -> `rtk pytest ...`; `cargo ...` -> `rtk cargo ...`; `tsc ...` -> `rtk tsc ...`; build/test/lint commands -> the matching `rtk` subcommand when available.
-- If RTK is unavailable or unsupported for a command, keep output tight with targeted args, `head`/`tail`, or explicit summaries.
-- Prefer semantic lookup/editing tools before broad file reads when exploring or modifying code.
-- Prefer narrow file ranges, symbol references, focused search results, and structured queries over whole-file or whole-repo dumps.
-- Avoid reading generated files, build artifacts, lockfiles, large JSON, screenshots, or old conversation logs unless required.
-- For UI work, prefer DOM checks and small cropped screenshots over full-page images.
-- For cross-session continuity, use short handoff/context summaries instead of rereading old conversations.
-- Keep progress updates and final replies concise while preserving decisions, changed files, verification, and blockers. Use compressed wording for routine updates.
-<!-- codex-token-discipline:end -->
-EOF
-
-mv "$tmp_file" "$AGENTS_FILE"
+write_global_agents_block "$AGENTS_FILE"
 
 echo "Installed Codex Token Discipline."
 echo "Main skill: $MAIN_SKILL_DIR"

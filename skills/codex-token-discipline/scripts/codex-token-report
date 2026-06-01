@@ -1,0 +1,209 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+STATE_DB="$CODEX_HOME/state_5.sqlite"
+DAYS=7
+TOP=10
+SHOW_PROJECT=0
+LARGE_EVENTS=0
+
+usage() {
+  cat <<'EOF'
+Usage: codex-token-report [options]
+
+Options:
+  -d, --days N       Days to inspect. Default: 7.
+  -t, --top N        Number of high-token threads. Default: 10.
+  -p, --project      Include current working directory totals.
+      --large-events Scan recent Codex JSONL logs for large images/events.
+  -h, --help         Show help.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -d|--days) DAYS="${2:-}"; shift 2 ;;
+    -t|--top) TOP="${2:-}"; shift 2 ;;
+    -p|--project) SHOW_PROJECT=1; shift ;;
+    --large-events) LARGE_EVENTS=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if ! [[ "$DAYS" =~ '^[0-9]+$' ]] || [[ "$DAYS" -lt 1 ]]; then
+  echo "--days must be a positive integer" >&2
+  exit 2
+fi
+
+if ! [[ "$TOP" =~ '^[0-9]+$' ]] || [[ "$TOP" -lt 1 ]]; then
+  echo "--top must be a positive integer" >&2
+  exit 2
+fi
+
+fmt_num() {
+  awk -v n="${1:-0}" 'BEGIN {
+    s = sprintf("%.0f", n)
+    out = ""
+    while (length(s) > 3) {
+      out = "," substr(s, length(s)-2, 3) out
+      s = substr(s, 1, length(s)-3)
+    }
+    print s out
+  }'
+}
+
+print_kv() {
+  printf "  %-24s %s\n" "$1" "$2"
+}
+
+sqlite_scalar() {
+  sqlite3 "$STATE_DB" "$1"
+}
+
+echo "Codex Token Report"
+echo "Generated: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+echo "Directory: $(pwd)"
+echo
+
+echo "Tools"
+if command -v rtk >/dev/null 2>&1; then
+  print_kv "RTK" "$(rtk --version 2>/dev/null || echo detected)"
+else
+  print_kv "RTK" "not found"
+fi
+
+if command -v serena >/dev/null 2>&1; then
+  print_kv "Serena" "$(serena --version 2>/dev/null || echo detected)"
+else
+  print_kv "Serena" "not found"
+fi
+
+if [[ -f "$CODEX_HOME/config.toml" ]] && grep -q 'mcp_servers.serena' "$CODEX_HOME/config.toml"; then
+  print_kv "Serena MCP" "configured"
+else
+  print_kv "Serena MCP" "not configured"
+fi
+echo
+
+echo "RTK Measured Savings"
+if command -v rtk >/dev/null 2>&1; then
+  if command -v jq >/dev/null 2>&1; then
+    rtk_json="$(rtk gain --format json 2>/dev/null || true)"
+    if [[ -n "$rtk_json" ]]; then
+      print_kv "Commands" "$(fmt_num "$(printf '%s' "$rtk_json" | jq -r '.summary.total_commands // 0')")"
+      print_kv "Input tokens" "$(fmt_num "$(printf '%s' "$rtk_json" | jq -r '.summary.total_input // 0')")"
+      print_kv "Output tokens" "$(fmt_num "$(printf '%s' "$rtk_json" | jq -r '.summary.total_output // 0')")"
+      print_kv "Saved tokens" "$(fmt_num "$(printf '%s' "$rtk_json" | jq -r '.summary.total_saved // 0')")"
+      print_kv "Average savings" "$(printf '%s' "$rtk_json" | jq -r '(.summary.avg_savings_pct // 0 | tostring)' | awk '{printf "%.1f%%", $1}')"
+    else
+      rtk gain | sed 's/^/  /'
+    fi
+  else
+    rtk gain | sed 's/^/  /'
+  fi
+else
+  echo "  RTK unavailable"
+fi
+echo
+
+echo "Codex Thread Usage"
+if [[ ! -f "$STATE_DB" ]]; then
+  echo "  State DB not found: $STATE_DB"
+  exit 0
+fi
+
+all_stats="$(sqlite_scalar "select count(*) || char(9) || coalesce(sum(tokens_used),0) from threads;")"
+recent_stats="$(sqlite_scalar "select count(*) || char(9) || coalesce(sum(tokens_used),0) from threads where updated_at >= strftime('%s','now','-${DAYS} days');")"
+all_count="${all_stats%%$'\t'*}"
+all_tokens="${all_stats#*$'\t'}"
+recent_count="${recent_stats%%$'\t'*}"
+recent_tokens="${recent_stats#*$'\t'}"
+print_kv "All threads" "$(fmt_num "$all_count") threads, $(fmt_num "$all_tokens") tokens"
+print_kv "Recent ${DAYS} days" "$(fmt_num "$recent_count") threads, $(fmt_num "$recent_tokens") tokens"
+
+if [[ "$SHOW_PROJECT" -eq 1 ]]; then
+  cwd_escaped="$(pwd | sed "s/'/''/g")"
+  project_stats="$(sqlite_scalar "select count(*) || char(9) || coalesce(sum(tokens_used),0) from threads where cwd = '$cwd_escaped';")"
+  project_count="${project_stats%%$'\t'*}"
+  project_tokens="${project_stats#*$'\t'}"
+  print_kv "Current project" "$(fmt_num "$project_count") threads, $(fmt_num "$project_tokens") tokens"
+fi
+echo
+
+echo "Daily Trend"
+sqlite3 -separator $'\t' "$STATE_DB" "
+with recursive dates(d) as (
+  select date('now','localtime','-${DAYS} days')
+  union all
+  select date(d, '+1 day') from dates where d < date('now','localtime')
+),
+usage as (
+  select
+    date(updated_at,'unixepoch','localtime') as d,
+    count(*) as threads,
+    coalesce(sum(tokens_used),0) as tokens,
+    coalesce(cast(avg(tokens_used) as integer),0) as avg_tokens,
+    sum(case when tokens_used >= 10000000 then 1 else 0 end) as high_threads
+  from threads
+  where updated_at >= strftime('%s','now','-${DAYS} days')
+  group by d
+)
+select dates.d, coalesce(threads,0), coalesce(tokens,0), coalesce(avg_tokens,0), coalesce(high_threads,0)
+from dates left join usage on usage.d = dates.d
+order by dates.d;
+" | awk -F '\t' '
+  BEGIN { printf "  %-10s %8s %15s %15s %8s\n", "Date", "Threads", "Tokens", "Avg/thread", "High" }
+  { printf "  %-10s %8s %15s %15s %8s\n", $1, $2, fmt($3), fmt($4), $5 }
+  function fmt(n, s, out) {
+    s = sprintf("%.0f", n); out = ""
+    while (length(s) > 3) { out = "," substr(s, length(s)-2, 3) out; s = substr(s, 1, length(s)-3) }
+    return s out
+  }
+'
+echo
+
+echo "High-token Threads"
+sqlite3 -separator $'\t' "$STATE_DB" "
+select
+  tokens_used,
+  datetime(updated_at,'unixepoch','localtime'),
+  coalesce(nullif(model,''),'unknown'),
+  coalesce(nullif(reasoning_effort,''),'unknown'),
+  id,
+  substr(replace(coalesce(title,''), char(10), ' '), 1, 100)
+from threads
+where updated_at >= strftime('%s','now','-${DAYS} days')
+order by tokens_used desc
+limit $TOP;
+" | awk -F '\t' '
+  BEGIN { printf "  %-14s %-19s %-12s %-8s %-36s %s\n", "Tokens", "Updated", "Model", "Effort", "Thread", "Title" }
+  { printf "  %-14s %-19s %-12s %-8s %-36s %s\n", fmt($1), $2, $3, $4, $5, $6 }
+  function fmt(n, s, out) {
+    s = sprintf("%.0f", n); out = ""
+    while (length(s) > 3) { out = "," substr(s, length(s)-2, 3) out; s = substr(s, 1, length(s)-3) }
+    return s out
+  }
+'
+
+if [[ "$LARGE_EVENTS" -eq 1 ]]; then
+  echo
+  echo "Large JSONL Events"
+  find "$CODEX_HOME/sessions" "$CODEX_HOME/archived_sessions" -name '*.jsonl' -mtime "-${DAYS}" 2>/dev/null \
+    | while read -r f; do
+        image_lines="$(grep -c 'data:image/[^;]*;base64' "$f" 2>/dev/null || true)"
+        image_bytes="$(awk '/data:image\/[^;]*;base64/ {sum += length($0)} END {print sum + 0}' "$f" 2>/dev/null || echo 0)"
+        max_line="$(awk '{if (length($0) > max) max = length($0)} END {print max + 0}' "$f" 2>/dev/null || echo 0)"
+        if [[ "$image_lines" -gt 0 || "$max_line" -gt 250000 ]]; then
+          printf "  %-8s image lines, %-12s image bytes, max line %-10s %s\n" \
+            "$image_lines" "$(fmt_num "$image_bytes")" "$(fmt_num "$max_line")" "$(basename "$f")"
+        fi
+      done | sort -k5,5nr | head -n "$TOP"
+fi
+
+echo
+echo "Notes"
+echo "  - RTK savings are exact only for RTK-wrapped commands."
+echo "  - Semantic tools reduce broad reads but usually do not expose exact saved-token counters."
+echo "  - Large screenshots, base64 images, old chat logs, and generated files often dominate token use."

@@ -9,6 +9,12 @@ It combines four practical habits:
 - Narrow context reads and small verification outputs.
 - Local token reports that identify expensive sessions, screenshots, and tool-output spikes.
 
+The installer bundles three skills:
+
+- `codex-token-discipline`: global token-saving workflow and diagnosis.
+- `codex-token-report`: direct trigger for token usage and savings reports.
+- `caveman`: optional compressed response mode for shorter wording.
+
 ## One-line Install
 
 ```bash
@@ -21,11 +27,22 @@ This is the recommended install path for "works everywhere by default".
 
 ## Install With Codex Skill Installer
 
-If you only want the skill, install:
+If you only want the skills, install:
 
-Ask Codex to install `Yice-AI/codex-token-discipline`, path `skills/codex-token-discipline`, using the built-in `skill-installer`.
+Ask Codex to install `Yice-AI/codex-token-discipline`, paths `skills/codex-token-discipline`, `skills/codex-token-report`, and `skills/caveman`, using the built-in `skill-installer`.
 
 The one-line installer is recommended because it also installs `codex-token-report` and writes global token-discipline defaults to `~/.codex/AGENTS.md`.
+
+By default, the one-line installer also attempts to install and configure the supporting tools used by this workflow:
+
+- RTK, for compressed shell-command output and exact `rtk gain` savings.
+- Serena, for semantic code lookup/editing through Codex MCP.
+
+To skip dependency installation and only install this repository's files:
+
+```bash
+CODEX_TOKEN_DISCIPLINE_SKIP_DEPS=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Yice-AI/codex-token-discipline/main/scripts/install.sh)"
+```
 
 ## Skill vs Global Defaults
 
@@ -45,8 +62,13 @@ If you install only the skill, it is useful when triggered. If you run the one-l
 ## What It Installs
 
 - `~/.codex/skills/codex-token-discipline/SKILL.md`
+- `~/.codex/skills/codex-token-report/SKILL.md`
+- `~/.codex/skills/caveman/SKILL.md`
 - `~/.local/bin/codex-token-report`
 - A marked `Global Token Discipline` block in `~/.codex/AGENTS.md`
+- RTK, if it is missing and can be installed.
+- Serena, if it is missing and can be installed.
+- Serena MCP config in `~/.codex/config.toml`, if it is not already configured.
 
 The installer does not upload local data and does not modify project repositories.
 
@@ -65,6 +87,15 @@ Use `codex-token-report` to answer:
 - How many tokens did RTK explicitly save?
 - Are screenshots/base64 images dominating the session?
 - Is the current project better or worse than recent baseline?
+
+After installation, verify:
+
+```bash
+rtk gain
+codex-token-report --project --large-events
+```
+
+Restart Codex and start a new conversation before judging whether global behavior changed.
 
 ## Existing Installations
 

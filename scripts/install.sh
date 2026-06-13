@@ -179,7 +179,11 @@ download "skills/codex-token-discipline/SKILL.md" > "$MAIN_SKILL_DIR/SKILL.md"
 download "skills/codex-token-discipline/scripts/codex-token-report" > "$MAIN_SKILL_DIR/scripts/codex-token-report"
 download "skills/codex-token-report/SKILL.md" > "$REPORT_SKILL_DIR/SKILL.md"
 download "skills/caveman/SKILL.md" > "$CAVEMAN_SKILL_DIR/SKILL.md"
-install -m 0755 "$MAIN_SKILL_DIR/scripts/codex-token-report" "$BIN_DIR/codex-token-report"
+if [[ -e "$BIN_DIR/codex-token-report" && "$MAIN_SKILL_DIR/scripts/codex-token-report" -ef "$BIN_DIR/codex-token-report" ]]; then
+  chmod 0755 "$BIN_DIR/codex-token-report"
+else
+  install -m 0755 "$MAIN_SKILL_DIR/scripts/codex-token-report" "$BIN_DIR/codex-token-report"
+fi
 
 AGENTS_FILE="$CODEX_HOME/AGENTS.md"
 touch "$AGENTS_FILE"

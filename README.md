@@ -11,7 +11,7 @@ It combines four practical habits:
 
 The installer bundles three skills:
 
-- `codex-token-discipline`: global token-saving workflow and diagnosis.
+- `codex-token-discipline`: default code-task token discipline plus token-saving workflow and diagnosis.
 - `codex-token-report`: direct trigger for token usage and savings reports.
 - `caveman`: optional compressed response mode for shorter wording.
 
@@ -48,7 +48,7 @@ CODEX_TOKEN_DISCIPLINE_SKIP_DEPS=1 bash -c "$(curl -fsSL https://raw.githubuserc
 
 Installing a Codex skill and installing global defaults are related, but they are not the same thing.
 
-A skill is like a manual Codex can open when the current request matches the skill description. For example, if the user asks "why is this session expensive?" or "show token savings", Codex can load this skill and follow its report workflow.
+A skill is like a manual Codex can open when the current request matches the skill description. This skill intentionally matches ordinary software-development tasks too, because token discipline should apply while reading, searching, editing, debugging, reviewing, building, and testing code, not only after the user asks about cost.
 
 Global `AGENTS.md` instructions are default rules Codex sees at the start of new conversations. They are the right place for always-on habits such as "use RTK for supported commands", "prefer narrow reads", and "avoid full-page screenshots unless needed".
 

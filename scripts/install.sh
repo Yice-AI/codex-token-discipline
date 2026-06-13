@@ -130,6 +130,7 @@ write_global_agents_block() {
 <!-- codex-token-discipline:start -->
 # Global Token Discipline
 
+- Apply these rules during normal coding work. Do not wait for the user to mention tokens, cost, RTK, or Serena.
 - Use RTK for supported shell commands when available to reduce tool-output tokens.
 - Common rewrites: `git ...` -> `rtk git ...`; `rg ...`/`grep ...` -> `rtk grep ...`; `npm ...` -> `rtk npm ...`; `npx ...` -> `rtk npx ...`; `pytest ...` -> `rtk pytest ...`; `cargo ...` -> `rtk cargo ...`; `tsc ...` -> `rtk tsc ...`; build/test/lint commands -> the matching `rtk` subcommand when available.
 - If RTK is unavailable or unsupported for a command, keep output tight with targeted args, `head`/`tail`, or explicit summaries.

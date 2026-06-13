@@ -1,6 +1,6 @@
 ---
 name: codex-token-discipline
-description: Reduces Codex token waste during software development using RTK-aware commands, semantic code navigation, narrow context reads, handoff summaries, and local token reports. Use when the user asks to save tokens, reduce Codex cost, inspect token usage, diagnose expensive sessions, install token-saving defaults, or keep coding quality high while using fewer tokens.
+description: Use for any software-development task that reads, searches, edits, debugs, reviews, tests, builds, or inspects a codebase. Also use when the user asks to save tokens, reduce Codex cost, inspect token usage, diagnose expensive sessions, install token-saving defaults, or keep coding quality high while using fewer tokens. Enforces RTK-aware commands, semantic code navigation, narrow context reads, handoff summaries, and local token reports.
 ---
 
 # Codex Token Discipline
@@ -9,6 +9,7 @@ description: Reduces Codex token waste during software development using RTK-awa
 
 When this skill is active, preserve engineering quality while aggressively reducing avoidable context.
 
+- Apply these rules during normal coding work. Do not wait for the user to mention tokens, cost, RTK, or Serena.
 - Prefer RTK-wrapped commands when RTK exists: `rtk git`, `rtk grep`, `rtk npm`, `rtk npx`, `rtk pytest`, `rtk cargo`, `rtk tsc`.
 - Prefer semantic lookup/editing tools before broad file reads.
 - Use narrow reads: line ranges, symbols, targeted `rg`, `jq` keys, focused logs.

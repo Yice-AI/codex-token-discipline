@@ -7,6 +7,7 @@ DAYS=7
 TOP=10
 SHOW_PROJECT=0
 LARGE_EVENTS=0
+SESSION_ID=""
 
 usage() {
   cat <<'EOF'
@@ -17,6 +18,7 @@ Options:
   -t, --top N        Number of high-token threads. Default: 10.
   -p, --project      Include current working directory totals.
       --large-events Scan recent Codex JSONL logs for large images/events.
+      --session ID   Safely audit one Codex session/thread without raw JSONL output.
   -h, --help         Show help.
 EOF
 }
@@ -27,6 +29,7 @@ while [[ $# -gt 0 ]]; do
     -t|--top) TOP="${2:-}"; shift 2 ;;
     -p|--project) SHOW_PROJECT=1; shift ;;
     --large-events) LARGE_EVENTS=1; shift ;;
+    --session) SESSION_ID="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -61,6 +64,160 @@ print_kv() {
 sqlite_scalar() {
   sqlite3 "$STATE_DB" "$1"
 }
+
+audit_session() {
+  local session_id="$1"
+  local session_file=""
+
+  if [[ -z "$session_id" ]]; then
+    echo "--session requires a thread id" >&2
+    exit 2
+  fi
+
+  session_file="$(
+    find "$CODEX_HOME/sessions" "$CODEX_HOME/archived_sessions" -name "*${session_id}*.jsonl" -print -quit 2>/dev/null || true
+  )"
+
+  if [[ -z "$session_file" ]]; then
+    echo "Session JSONL not found for: $session_id" >&2
+    exit 1
+  fi
+
+  ruby - "$session_file" "$session_id" <<'RUBY'
+require "json"
+
+path, requested_id = ARGV
+stats = Hash.new(0)
+last_total = {}
+first_ts = nil
+last_ts = nil
+risky = []
+largest_outputs = []
+largest_lines = []
+
+safe_snippet = lambda do |text, max = 140|
+  text.to_s.gsub(/\s+/, " ").slice(0, max)
+end
+
+File.foreach(path).with_index(1) do |line, lineno|
+  stats[:lines] += 1
+  len = line.bytesize
+  largest_lines << [len, lineno]
+  largest_lines = largest_lines.sort_by { |x| -x[0] }.first(5)
+  stats[:base64_image_lines] += 1 if line.include?("data:image/") && line.include?(";base64")
+  stats[:base64_image_bytes] += len if line.include?("data:image/") && line.include?(";base64")
+
+  obj = JSON.parse(line) rescue nil
+  next unless obj
+
+  first_ts ||= obj["timestamp"]
+  last_ts = obj["timestamp"] || last_ts
+  payload = obj["payload"] || {}
+
+  case obj["type"]
+  when "response_item"
+    case payload["type"]
+    when "function_call"
+      stats[:function_calls] += 1
+      name = payload["name"].to_s
+      args_raw = payload["arguments"].to_s
+      args = JSON.parse(args_raw) rescue {}
+      cmd = args.fetch("cmd", args_raw).to_s
+      stats[:rtk_calls] += 1 if cmd.match?(%r{(^|[ /])rtk\s|/rtk\s})
+      stats[:codex_token_report_calls] += 1 if cmd.include?("codex-token-report")
+      direct_session_read =
+        cmd.match?(/\b(cat|sed|head|tail|grep|rg|awk)\b/) &&
+        cmd.match?(/(\.jsonl|rollout-|\/sessions\/|\/archived_sessions\/|shell_snapshots)/) &&
+        !cmd.include?("codex-token-report")
+      if direct_session_read
+        stats[:direct_session_reads] += 1
+        risky << [lineno, name, safe_snippet.call(cmd)]
+        risky = risky.first(12)
+      end
+    when "function_call_output"
+      stats[:function_outputs] += 1
+      output = payload["output"].to_s
+      largest_outputs << [output.bytesize, payload["call_id"].to_s]
+      largest_outputs = largest_outputs.sort_by { |x| -x[0] }.first(8)
+    when "message"
+      role = payload["role"].to_s
+      stats[:"messages_#{role}"] += 1
+    when "reasoning"
+      stats[:reasoning_items] += 1
+      stats[:encrypted_reasoning_items] += 1 if payload["encrypted_content"]
+    end
+  when "event_msg"
+    if payload["type"] == "token_count"
+      stats[:token_samples] += 1
+      usage = payload.dig("info", "total_token_usage") || {}
+      last_total = usage
+    end
+  end
+end
+
+fmt = lambda { |n| n.to_i.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse }
+
+puts "Codex Session Token Audit"
+puts "Thread: #{requested_id}"
+puts "File: #{path}"
+puts "Time: #{first_ts} -> #{last_ts}"
+puts
+puts "Token Counters"
+%w[input_tokens cached_input_tokens output_tokens reasoning_output_tokens total_tokens].each do |key|
+  puts "  %-26s %s" % [key.tr("_", " "), fmt.call(last_total[key] || 0)]
+end
+puts
+puts "Event Summary"
+[
+  [:jsonl_lines, stats[:lines]],
+  [:function_calls, stats[:function_calls]],
+  [:function_outputs, stats[:function_outputs]],
+  [:rtk_calls, stats[:rtk_calls]],
+  [:codex_token_report_calls, stats[:codex_token_report_calls]],
+  [:direct_session_reads, stats[:direct_session_reads]],
+  [:token_samples, stats[:token_samples]],
+  [:encrypted_reasoning_items, stats[:encrypted_reasoning_items]],
+  [:base64_image_lines, stats[:base64_image_lines]],
+  [:base64_image_bytes, stats[:base64_image_bytes]]
+].each { |key, value| puts "  %-26s %s" % [key.to_s.tr("_", " "), fmt.call(value)] }
+
+puts
+puts "Largest JSONL Lines"
+largest_lines.each do |bytes, lineno|
+  puts "  line %-8s %12s bytes" % [lineno, fmt.call(bytes)]
+end
+
+puts
+puts "Largest Tool Outputs"
+largest_outputs.each do |bytes, call_id|
+  puts "  %-32s %12s bytes" % [call_id.empty? ? "(unknown)" : call_id, fmt.call(bytes)]
+end
+
+puts
+puts "Risky Direct Session Reads"
+if risky.empty?
+  puts "  none detected"
+else
+  risky.each do |lineno, name, cmd|
+    puts "  line #{lineno}: #{name} -> #{cmd}"
+  end
+end
+
+puts
+puts "Guidance"
+if stats[:direct_session_reads] > 0
+  puts "  Replace raw JSONL reads with: codex-token-report --session #{requested_id}"
+  puts "  If old context is needed, write a short handoff summary instead of dumping the rollout."
+else
+  puts "  No raw session-log dump pattern detected."
+end
+RUBY
+}
+
+if [[ -n "$SESSION_ID" ]]; then
+  audit_session "$SESSION_ID"
+  exit 0
+fi
 
 echo "Codex Token Report"
 echo "Generated: $(date '+%Y-%m-%d %H:%M:%S %Z')"

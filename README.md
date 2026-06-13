@@ -78,6 +78,7 @@ The installer does not upload local data and does not modify project repositorie
 codex-token-report
 codex-token-report --project
 codex-token-report --days 14 --top 20 --large-events
+codex-token-report --session 019ec265-0f07-7923-a09b-cabb3aac9481
 ```
 
 Use `codex-token-report` to answer:
@@ -87,6 +88,7 @@ Use `codex-token-report` to answer:
 - How many tokens did RTK explicitly save?
 - Are screenshots/base64 images dominating the session?
 - Is the current project better or worse than recent baseline?
+- Which commands or events made one specific session expensive, without dumping raw rollout JSONL?
 
 After installation, verify:
 
@@ -119,4 +121,5 @@ CODEX_TOKEN_DISCIPLINE_FORCE_AGENTS=1 bash -c "$(curl -fsSL https://raw.githubus
 - RTK savings are exact only for commands that went through RTK.
 - Serena or other semantic tools do not expose exact saved-token counters; their value is inferred from fewer broad reads and lower session trends.
 - Images and screenshots can dominate token use. Use cropped screenshots or DOM checks when possible.
+- Codex rollout/session JSONL can contain huge single-line system prompts and encrypted reasoning. Do not inspect it with raw `cat`, `sed`, `head`, or `tail`; use `codex-token-report --session <thread-id>`.
 - Old conversations may not reload new skills/global instructions reliably. Start a new conversation after installation for the cleanest result.

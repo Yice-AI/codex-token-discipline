@@ -136,6 +136,7 @@ write_global_agents_block() {
 - Prefer semantic lookup/editing tools before broad file reads when exploring or modifying code.
 - Prefer narrow file ranges, symbol references, focused search results, and structured queries over whole-file or whole-repo dumps.
 - Avoid reading generated files, build artifacts, lockfiles, large JSON, screenshots, or old conversation logs unless required.
+- Never print raw Codex rollout/session JSONL, archived sessions, shell snapshots, or encrypted reasoning. Use `codex-token-report --session <thread-id>` for safe session audits.
 - For UI work, prefer DOM checks and small cropped screenshots over full-page images.
 - For cross-session continuity, use short handoff/context summaries instead of rereading old conversations.
 - Keep progress updates and final replies concise while preserving decisions, changed files, verification, and blockers. Use compressed wording for routine updates.

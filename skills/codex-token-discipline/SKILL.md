@@ -13,6 +13,8 @@ When this skill is active, preserve engineering quality while aggressively reduc
 - Prefer semantic lookup/editing tools before broad file reads.
 - Use narrow reads: line ranges, symbols, targeted `rg`, `jq` keys, focused logs.
 - Avoid reading generated output, build artifacts, large JSON, lockfiles, screenshots, or old conversations unless required.
+- Never print raw Codex rollout/session JSONL, archived sessions, shell snapshots, or encrypted reasoning. These files often contain entire system/developer prompts on one line and can instantly consume the context window.
+- For session/token investigations, use `codex-token-report --session <thread-id>` or a local summarizing script that emits counts and small excerpts only. Do not use `cat`, `sed`, `head`, `tail`, or broad `grep` directly on session JSONL.
 - For UI work, prefer DOM checks and small cropped screenshots over full-page images.
 - For long-running projects, create or update a short handoff/context note instead of asking future sessions to reread old chats.
 - Keep progress updates and final answers compact but include decisions, changed files, verification, and blockers.
@@ -42,11 +44,20 @@ Run:
 codex-token-report --project --days 7 --top 10 --large-events
 ```
 
+For a specific expensive or broken thread, run the safe session audit:
+
+```bash
+codex-token-report --session 019ec265-0f07-7923-a09b-cabb3aac9481
+```
+
+This intentionally reports only metadata, token counters, risky command patterns, and largest event sizes. It must not dump raw JSONL content.
+
 Interpretation:
 
 - High RTK savings means command output compression is working.
 - High image/base64 counts means screenshots or visual inputs are dominating.
 - High thread tokens with low RTK/Serena usage means broad context reads or chat carryover are likely.
+- Any direct raw read of rollout/session JSONL is a skill failure. Replace it with `codex-token-report --session <thread-id>` and add a durable handoff instead of rereading the log.
 - Repeated "read old conversation" tasks should become handoff summaries.
 
 ## Install / Report Script

@@ -38,6 +38,8 @@ By default, the one-line installer also attempts to install and configure the su
 - RTK, for compressed shell-command output and exact `rtk gain` savings.
 - Serena, for semantic code lookup/editing through Codex MCP.
 
+RTK and Serena are intended to work together in every new coding session: RTK keeps shell output small, while Serena should be used for project activation, symbol overviews, definitions/references, diagnostics, and symbol-level edits before broad file reads.
+
 To skip dependency installation and only install this repository's files:
 
 ```bash
@@ -68,7 +70,7 @@ If you install only the skill, it is useful when triggered. If you run the one-l
 - A marked `Global Token Discipline` block in `~/.codex/AGENTS.md`
 - RTK, if it is missing and can be installed.
 - Serena, if it is missing and can be installed.
-- Serena MCP config in `~/.codex/config.toml`, if it is not already configured.
+- Serena MCP config through `codex mcp add serena`, falling back to `~/.codex/config.toml` only when the Codex CLI helper is unavailable.
 
 The installer does not upload local data and does not modify project repositories.
 
@@ -94,6 +96,7 @@ After installation, verify:
 
 ```bash
 rtk gain
+codex mcp get serena
 codex-token-report --project --large-events
 ```
 

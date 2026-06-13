@@ -10,6 +10,9 @@ description: Use for any software-development task that reads, searches, edits, 
 When this skill is active, preserve engineering quality while aggressively reducing avoidable context.
 
 - Apply these rules during normal coding work. Do not wait for the user to mention tokens, cost, RTK, or Serena.
+- Treat RTK and Serena as paired defaults: RTK controls shell output; Serena controls codebase exploration and symbol-level edits.
+- At the start of each codebase task, if Serena MCP tools are available, activate the project/root and use Serena for symbol overview, definition/reference lookup, diagnostics, and symbol edits before broad shell reads.
+- If Serena is unavailable in the current session, say so once, verify MCP configuration only when appropriate, then fall back to RTK-wrapped narrow reads. Do not silently behave as if RTK alone satisfies this skill.
 - Prefer RTK-wrapped commands when RTK exists: `rtk git`, `rtk grep`, `rtk npm`, `rtk npx`, `rtk pytest`, `rtk cargo`, `rtk tsc`.
 - Prefer semantic lookup/editing tools before broad file reads.
 - Use narrow reads: line ranges, symbols, targeted `rg`, `jq` keys, focused logs.
@@ -31,11 +34,12 @@ When this skill is active, preserve engineering quality while aggressively reduc
 
 ### During Coding
 
-1. Search narrowly first.
-2. Read only files or symbols needed for the change.
+1. Activate the project with Serena when Serena tools are present.
+2. Use Serena symbol overview/search/reference/diagnostic tools for code structure before broad file reads.
 3. Use RTK for supported shell commands.
-4. Run focused verification.
-5. Summarize only what changed and what was tested.
+4. Read only files, ranges, or symbols needed for the change.
+5. Run focused verification.
+6. Summarize only what changed and what was tested.
 
 ### Expensive Session Diagnosis
 

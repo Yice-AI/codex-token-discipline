@@ -82,9 +82,22 @@ install_serena() {
     return 0
   fi
 
+  if command -v codex >/dev/null 2>&1; then
+    if codex mcp get serena >/dev/null 2>&1; then
+      echo "Serena MCP already configured via Codex."
+      return 0
+    fi
+
+    if codex mcp add serena -- "$serena_cmd" start-mcp-server --context=codex --project-from-cwd >/dev/null 2>&1; then
+      echo "Serena MCP configured via Codex."
+      return 0
+    fi
+
+    echo "codex mcp add failed; falling back to config.toml append." >&2
+  fi
+
   local config_file="$CODEX_HOME/config.toml"
   touch "$config_file"
-
   if grep -q '^[[:space:]]*\[mcp_servers\.serena\]' "$config_file"; then
     echo "Serena MCP already configured in $config_file"
     return 0
@@ -131,6 +144,9 @@ write_global_agents_block() {
 # Global Token Discipline
 
 - Apply these rules during normal coding work. Do not wait for the user to mention tokens, cost, RTK, or Serena.
+- Treat RTK and Serena as paired defaults: RTK controls shell output; Serena controls codebase exploration and symbol-level edits.
+- At the start of each codebase task, if Serena MCP tools are available, activate the project/root and use Serena for symbol overview, definition/reference lookup, diagnostics, and symbol edits before broad shell reads.
+- If Serena is unavailable in the current session, say so once, verify MCP configuration only when appropriate, then fall back to RTK-wrapped narrow reads. Do not silently behave as if RTK alone satisfies this workflow.
 - Use RTK for supported shell commands when available to reduce tool-output tokens.
 - Common rewrites: `git ...` -> `rtk git ...`; `rg ...`/`grep ...` -> `rtk grep ...`; `npm ...` -> `rtk npm ...`; `npx ...` -> `rtk npx ...`; `pytest ...` -> `rtk pytest ...`; `cargo ...` -> `rtk cargo ...`; `tsc ...` -> `rtk tsc ...`; build/test/lint commands -> the matching `rtk` subcommand when available.
 - If RTK is unavailable or unsupported for a command, keep output tight with targeted args, `head`/`tail`, or explicit summaries.

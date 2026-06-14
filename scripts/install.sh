@@ -96,11 +96,22 @@ install_serena() {
     echo "codex mcp add failed; falling back to config.toml append." >&2
   fi
 
-  local config_file="$CODEX_HOME/config.toml"
+  local config_file tmp_file
+  config_file="$CODEX_HOME/config.toml"
   touch "$config_file"
   if grep -q '^[[:space:]]*\[mcp_servers\.serena\]' "$config_file"; then
-    echo "Serena MCP already configured in $config_file"
-    return 0
+    local backup_file
+    backup_file="$CODEX_HOME/backups_state/config-before-serena-mcp-$(date +%Y%m%d_%H%M%S).toml"
+    mkdir -p "$(dirname "$backup_file")"
+    cp "$config_file" "$backup_file"
+    tmp_file="$(mktemp)"
+    awk '
+      /^\[mcp_servers\.serena\][[:space:]]*$/ {skip=1; next}
+      skip == 1 && /^\[/ {skip=0}
+      skip != 1 {print}
+    ' "$config_file" > "$tmp_file"
+    mv "$tmp_file" "$config_file"
+    echo "Rewriting Serena MCP in $config_file (backup: $backup_file)"
   fi
 
   cat >> "$config_file" <<EOF
@@ -127,6 +138,14 @@ write_global_agents_block() {
     awk '
       /<!-- codex-token-discipline:start -->/ {skip=1; next}
       /<!-- codex-token-discipline:end -->/ {skip=0; next}
+      skip != 1 {print}
+    ' "$agents_file" > "$tmp_file"
+  elif [[ "$FORCE_AGENTS" == "1" ]] && grep -q '^# Global Token Discipline[[:space:]]*$' "$agents_file"; then
+    tmp_file="$(mktemp)"
+    awk '
+      BEGIN {skip=0}
+      /^# Global Token Discipline[[:space:]]*$/ {skip=1; next}
+      skip == 1 && /^# / {skip=0}
       skip != 1 {print}
     ' "$agents_file" > "$tmp_file"
   elif [[ "$FORCE_AGENTS" != "1" ]] && has_existing_token_discipline "$agents_file"; then

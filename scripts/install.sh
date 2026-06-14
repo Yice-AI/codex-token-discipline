@@ -11,6 +11,10 @@ BIN_DIR="$HOME/.local/bin"
 RAW_BASE="https://raw.githubusercontent.com/$REPO/$REF"
 SKIP_DEPS="${CODEX_TOKEN_DISCIPLINE_SKIP_DEPS:-0}"
 FORCE_AGENTS="${CODEX_TOKEN_DISCIPLINE_FORCE_AGENTS:-0}"
+CURL_CONNECT_TIMEOUT="${CODEX_TOKEN_DISCIPLINE_CURL_CONNECT_TIMEOUT:-10}"
+CURL_MAX_TIME="${CODEX_TOKEN_DISCIPLINE_CURL_MAX_TIME:-60}"
+CURL_RETRY="${CODEX_TOKEN_DISCIPLINE_CURL_RETRY:-3}"
+CURL_RETRY_DELAY="${CODEX_TOKEN_DISCIPLINE_CURL_RETRY_DELAY:-2}"
 
 export PATH="$BIN_DIR:$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
@@ -23,7 +27,24 @@ need() {
 
 download() {
   local path="$1"
-  curl -fsSL "$RAW_BASE/$path"
+  curl -fsSL \
+    --connect-timeout "$CURL_CONNECT_TIMEOUT" \
+    --max-time "$CURL_MAX_TIME" \
+    --retry "$CURL_RETRY" \
+    --retry-delay "$CURL_RETRY_DELAY" \
+    --retry-all-errors \
+    "$RAW_BASE/$path"
+}
+
+fetch_to_stdout() {
+  local url="$1"
+  curl -fsSL \
+    --connect-timeout "$CURL_CONNECT_TIMEOUT" \
+    --max-time "$CURL_MAX_TIME" \
+    --retry "$CURL_RETRY" \
+    --retry-delay "$CURL_RETRY_DELAY" \
+    --retry-all-errors \
+    "$url"
 }
 
 install_rtk() {
@@ -39,7 +60,7 @@ install_rtk() {
   fi
 
   echo "Installing RTK..."
-  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
+  fetch_to_stdout https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
 
   if command -v rtk >/dev/null 2>&1 && rtk gain >/dev/null 2>&1; then
     echo "RTK installed: $(rtk --version 2>/dev/null || echo detected)"
@@ -57,7 +78,7 @@ install_uv() {
   if command -v brew >/dev/null 2>&1; then
     brew install uv
   else
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    fetch_to_stdout https://astral.sh/uv/install.sh | sh
     export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
   fi
 }
